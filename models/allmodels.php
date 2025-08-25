@@ -304,7 +304,7 @@ class allModels {
         }
     }
 
-    public function getTodayAppointmentLocation($email,$userLng,$userLat) {
+    public function getTodayAppointmentLocation($email, $userLng, $userLat, $isClockedIn = false) {
 
         $today = date('Y-m-d'); // Current date
     
@@ -337,12 +337,13 @@ class allModels {
     
         $row = $result->fetch_assoc();
 
-            return [
+            $response =  [
                 "id"        => $row['appointment_id'],
                 "latitude"  => $row['latitude'],
                 "longitude" => $row['longitude'],
                 "distance"  => $row['distance'],
-                "date"      => $row['appointment_date']
+                "date"      => $row['appointment_date'],
+                "action"    => null
             ];
 
             if ($row['distance'] <= 5) {
@@ -353,12 +354,11 @@ class allModels {
                 $response["action"] = "auto_clock_out";
                 // Example auto clock-out update
                 $update = $this->db->prepare("UPDATE appointments SET clocked_out = NOW() WHERE id = ?");
-                $update->bind_param('i', $appointment['id']);
+                $update->bind_param('i', $row['id']);
                 $update->execute();
-
             }
     
-        return null; // No appointment today
+        return $response; // No appointment today
     }
 
     public function logActivity($user, $user_id, $action, $description, $date) {

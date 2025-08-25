@@ -627,7 +627,7 @@ class Controllers {
                 $latitude = $locationData['latitude'] ?? null;
                 $stmt->close();
 
-                error_log($distance);
+                //error_log($distance);
                
 
                 if ($distance > 5) {
