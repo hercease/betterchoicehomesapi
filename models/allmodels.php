@@ -354,7 +354,7 @@ class allModels {
                 $response["action"] = "auto_clock_out";
                 // Example auto clock-out update
                 $update = $this->db->prepare("UPDATE appointments SET clocked_out = NOW() WHERE id = ?");
-                $update->bind_param('i', $row['id']);
+                $update->bind_param('i', $row['appointment_id']);
                 $update->execute();
             }
     
