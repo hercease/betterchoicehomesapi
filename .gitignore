@@ -1,0 +1,12 @@
+# Dependency directories
+node_modules/
+vendor/
+vendors/
+
+# Environment files
+.env
+config.php
+
+# System files
+.DS_Store
+.idea/
