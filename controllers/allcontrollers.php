@@ -66,7 +66,7 @@ class Controllers {
             <html lang="en">
             <head>
             <meta charset="UTF-8">
-            <title>Password Reset - Better Choice Homes</title>
+            <title>Password Reset - Better Choice Group Homes</title>
             <style>
                 body { font-family: 'Segoe UI', sans-serif; background-color: #f8f9fa; margin: 0; padding: 0; color: #333; }
                 .container { max-width: 600px; margin: 30px auto; background-color: #ffffff; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden; }
@@ -101,7 +101,7 @@ class Controllers {
                     <p>If you didn’t request this change, please contact our support team right away.</p>
                 </div>
                 <div class="footer">
-                    &copy; {$year} Better Choice Homes. All rights reserved.
+                    &copy; {$year} Better Choice Group Homes. All rights reserved.
                 </div>
             </div>
             </body>
