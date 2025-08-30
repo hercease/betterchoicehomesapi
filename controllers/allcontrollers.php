@@ -327,7 +327,7 @@ class Controllers {
                 'data' => $response
             ];
 
-            error_log($response);
+            //error_log($response);
 
         } catch (Exception $e) {
             http_response_code(500);
@@ -559,7 +559,7 @@ class Controllers {
                 $this->allModel->sanitizeInput($_POST['email'] ?? '')
             );
 
-             error_log(print_r($_POST, true));
+            // error_log(print_r($_POST, true));
 
             $timezone = $_POST['timezone'] ?? 'America/Toronto';
             date_default_timezone_set($timezone);
