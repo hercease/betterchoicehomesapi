@@ -554,12 +554,9 @@ class Controllers {
 
     public function Attendance() {
         try {
-
             $email = $this->allModel->decryptCookie(
                 $this->allModel->sanitizeInput($_POST['email'] ?? '')
             );
-
-            // error_log(print_r($_POST, true));
 
             $timezone = $_POST['timezone'] ?? 'America/Toronto';
             date_default_timezone_set($timezone);
@@ -578,13 +575,13 @@ class Controllers {
 
             // check schedule
             $sql = "SELECT id, clockin, clockout, start_time, end_time, location_id,
-                CASE 
-                WHEN end_time <= start_time 
-                    THEN TIMESTAMPDIFF(SECOND, start_time, DATE_ADD(end_time, INTERVAL 1 DAY))
-                    ELSE TIMESTAMPDIFF(SECOND, start_time, end_time)
-                END AS total_seconds 
-                FROM scheduling 
-                WHERE email = ? AND schedule_date = ?";
+                    CASE 
+                    WHEN end_time <= start_time 
+                        THEN TIMESTAMPDIFF(SECOND, start_time, DATE_ADD(end_time, INTERVAL 1 DAY))
+                        ELSE TIMESTAMPDIFF(SECOND, start_time, end_time)
+                    END AS total_seconds 
+                    FROM scheduling 
+                    WHERE email = ? AND schedule_date = ?";
             $stmt = $this->db->prepare($sql);
             $stmt->bind_param("ss", $email, $date);
             $stmt->execute();
@@ -596,7 +593,21 @@ class Controllers {
                 throw new Exception("No schedule found for today");
             }
 
+            // Convert schedule times to DateTime objects for comparison
+            $currentTimeObj = DateTime::createFromFormat('H:i:s', $time);
+            $scheduleEndTimeObj = DateTime::createFromFormat('H:i:s', $schedule['end_time']);
+            
+            // Handle overnight schedules (if end time is earlier than start time, it spans to next day)
+            if ($schedule['end_time'] <= $schedule['start_time']) {
+                // For overnight schedules, add 1 day to end time for comparison
+                $scheduleEndTimeObj->modify('+1 day');
+            }
+
             if ($action === "clockin") {
+                // Check if current time is beyond scheduled end time
+                if ($currentTimeObj > $scheduleEndTimeObj) {
+                    throw new Exception("Cannot clock in - your scheduled shift has already ended.");
+                }
 
                 if (!empty($schedule['clockout'])) {
                     throw new Exception("You have already clocked out today");
@@ -627,9 +638,6 @@ class Controllers {
                 $latitude = $locationData['latitude'] ?? null;
                 $stmt->close();
 
-                //error_log($distance);
-               
-
                 if ($distance > 5) {
                     throw new Exception("You are not within your appointment location yet");
                 }
@@ -650,11 +658,9 @@ class Controllers {
                     'longitude' => $longitude,
                     'work_seconds' => $schedule['total_seconds']
                 ];
-
             }
 
             if ($action === "clockout") {
-
                 if (empty($schedule['clockin'])) {
                     return [
                         'status' => false,
@@ -681,9 +687,6 @@ class Controllers {
                     'status' => true,
                     'message' => 'Clock-out successful at ' . $time
                 ];
-
-                 
-
             }
 
             return [
@@ -692,12 +695,10 @@ class Controllers {
             ];
 
         } catch (Exception $th) {
-
             return [
                 'status' => false,
                 'message' => 'Error: ' . $th->getMessage()
             ];
-
         }
     }
 
