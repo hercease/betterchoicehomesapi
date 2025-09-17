@@ -622,14 +622,14 @@ class Controllers {
                 $latitude = 0;
                 // check distance
                 $sql = "SELECT ST_Distance_Sphere(
-                            POINT(latitude, longitude),
+                            POINT(longitude, latitude),
                             POINT(?, ?)
                         ) AS distance,
                         longitude,
                         latitude
                         FROM locations WHERE id = ?";
                 $stmt = $this->db->prepare($sql);
-                $stmt->bind_param("ddi",$lat, $long, $schedule['location_id']);
+                $stmt->bind_param("ddi", $long, $lat, $schedule['location_id']);
                 $stmt->execute();
                 $result = $stmt->get_result();
                 $locationData = $result->fetch_assoc();
