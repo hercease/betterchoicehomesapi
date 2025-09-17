@@ -638,6 +638,11 @@ class Controllers {
                 $latitude = $locationData['latitude'] ?? null;
                 $stmt->close();
 
+                // Debug log before checking distance
+                error_log("Frontend coordinates: longitude={$long}, latitude={$lat}");
+                error_log("Database coordinates: longitude={$locationData['longitude']}, latitude={$locationData['latitude']}");
+                error_log("Calculated distance (meters): " . ($distance ?? 'NULL'));
+
                 if ($distance > 5) {
                     throw new Exception("You are not within your appointment location yet");
                 }
