@@ -643,7 +643,7 @@ class Controllers {
                 error_log("Database coordinates: longitude={$locationData['longitude']}, latitude={$locationData['latitude']}");
                 error_log("Calculated distance (meters): " . ($distance ?? 'NULL'));
 
-                if ($distance > 5) {
+                if ($distance > 40) {
                     throw new Exception("You are not within your appointment location yet");
                 }
 
