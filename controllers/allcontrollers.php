@@ -629,7 +629,7 @@ class Controllers {
                         latitude
                         FROM locations WHERE id = ?";
                 $stmt = $this->db->prepare($sql);
-                $stmt->bind_param("ddi", $long, $lat, $schedule['location_id']);
+                $stmt->bind_param("ddi",$lat, $long, $schedule['location_id']);
                 $stmt->execute();
                 $result = $stmt->get_result();
                 $locationData = $result->fetch_assoc();
