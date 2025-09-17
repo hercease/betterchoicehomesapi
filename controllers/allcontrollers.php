@@ -622,7 +622,7 @@ class Controllers {
                 $latitude = 0;
                 // check distance
                 $sql = "SELECT ST_Distance_Sphere(
-                            POINT(longitude, latitude),
+                            POINT(latitude, longitude),
                             POINT(?, ?)
                         ) AS distance,
                         longitude,
