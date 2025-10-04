@@ -415,7 +415,7 @@ class Controllers {
 
                 return [
                     'status' => false,
-                    'message' => 'Error: ' . $e->getMessage()
+                    'message' => $e->getMessage()
                 ];
 
             }
@@ -466,7 +466,7 @@ class Controllers {
         } catch (Exception $th) {
             return [
                 'status' => false,
-                'message' => 'Error: ' . $th->getMessage()
+                'message' => $th->getMessage()
             ];
         }
        
@@ -574,7 +574,7 @@ class Controllers {
         } catch (Exception $th) {
             return [
                 'status' => false,
-                'message' => 'Error: ' . $th->getMessage()
+                'message' => $th->getMessage()
             ];
         }
     }
@@ -729,7 +729,7 @@ class Controllers {
         } catch (Exception $th) {
             return [
                 'status' => false,
-                'message' => 'Error: ' . $th->getMessage()
+                'message' => $th->getMessage()
             ];
         }
     }
