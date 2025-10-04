@@ -39,6 +39,33 @@ class Controllers {
         }
     }
 
+    public function processFingerprintLogin(){
+        try {
+
+            $email = $this->allModel->sanitizeInput($_POST['email']);
+
+            error_log("Fingerprint login attempt for email: " . $email);
+
+            // Fetch user info
+            $fetchuserinfo = $this->allModel->getUserInfo($email);
+
+            if ($fetchuserinfo === null) {
+                throw new Exception("Ooops, User not found");
+            }
+
+            $value = $this->allModel->encryptCookie($email);
+
+            // Set session variables
+            return ["status" => true, "token" => $value];
+
+        } catch (Exception $th) {
+            return [
+                'status' => false,
+                'message' => $th->getMessage()
+            ];
+        }
+    }
+
     public function processForgotPassword(){
         try{
 

@@ -79,6 +79,10 @@ try {
             $savenotification = $controller->saveNotification();
             sendSuccessResponse($savenotification); // sends as JSON
             break;
+        case '/fingerprintlogin':
+            $fingerprintlogin = $controller->processFingerprintLogin();
+            sendSuccessResponse($fingerprintlogin); // sends as JSON
+            break;
             
     }
 
