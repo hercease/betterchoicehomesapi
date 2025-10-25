@@ -139,7 +139,7 @@ class allModels {
 
          // Fetch stats for the current month
         $statStmt = $this->db->prepare("
-            SELECT id, schedule_date, clockin, clockout 
+            SELECT id, schedule_date, clockin, clockout, pay_per_hour
             FROM scheduling
             WHERE user_id = ? 
             AND MONTH(schedule_date) = MONTH(CURRENT_DATE())
@@ -149,35 +149,33 @@ class allModels {
         $statStmt->execute();
         $statResult = $statStmt->get_result();
 
-        $activities = [];
+        $records = [];
         $totalHours = 0;
+        $totalPay = 0;
         $daysAttended = [];
-        $stats = [];
-    
-        while ($stat = $statResult->fetch_assoc()) {
-            $stats[] = $stat;
 
-            if (!empty($stat['clock_in']) && !empty($stat['clock_out'])) {
-                $start = strtotime($stat['clock_in']);
-                $end   = strtotime($stat['clock_out']);
+        while ($stat = $statResult->fetch_assoc()) {
+            $records[] = $stat;
+
+            if (!empty($stat['clockin']) && !empty($stat['clockout'])) {
+                $start = strtotime($stat['clockin']);
+                $end   = strtotime($stat['clockout']);
                 $hours = ($end - $start) / 3600; // Convert seconds to hours
-                $hours = $hours * (float)$stat['pay_per_hour'];
+
                 if ($hours > 0) {
                     $totalHours += $hours;
+                    $totalPay += $hours * (float)$stat['pay_per_hour'];
                     $daysAttended[$stat['schedule_date']] = true;
                 }
             }
-
-             // Unique days
         }
         $statStmt->close();
 
-        // Calculate stats
-        $stats = [
+        $summary = [
             'total_hours'        => round($totalHours, 2),
             'total_days_attended'=> count($daysAttended),
-            'total_expected_pay' => round($totalHours, 2),
-            'total_schedules'    => count($stats),
+            'total_expected_pay' => round($totalPay, 2),
+            'total_schedules'    => count($records),
         ];
 
         //fetch user activities
@@ -195,7 +193,7 @@ class allModels {
         // Attach to user
         $user['documents']      = $documents;
         $user['certifications'] = $certificates;
-        $user['stats']          = $stats;
+        $user['stats']          = $summary;
         $user['activities']     = $activities;
 
         return $user;

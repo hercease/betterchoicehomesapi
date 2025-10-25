@@ -125,7 +125,7 @@ class Controllers {
                     <p>Here is your new temporary password:</p>
                     <div class="password-box">{$password}</div>
                     <p>For your security, please log in and change your password immediately.</p>
-                    <p>If you didn’t request this change, please contact our support team right away.</p>
+                    <p>If you did not request this change, please contact our support team right away.</p>
                 </div>
                 <div class="footer">
                     &copy; {$year} Better Choice Group Homes. All rights reserved.
