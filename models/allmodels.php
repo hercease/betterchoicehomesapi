@@ -183,6 +183,7 @@ class allModels {
         $activitiesStmt->bind_param("i", $user['user_id']);
         $activitiesStmt->execute();
         $activitiesResult = $activitiesStmt->get_result();
+        $activities = [];
         while ($act = $activitiesResult->fetch_assoc()) {
             $activities[] = [
                 'action' => $act['action'],

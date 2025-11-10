@@ -29,7 +29,7 @@ class Controllers {
             $value = $this->allModel->encryptCookie($email);
 
             // Set session variables
-            return ["status" => true, "token" => $value];
+            return ["status" => true, "token" => $value, "isActive" => $fetchuserinfo['isActive']];
 
         } catch (Exception $th) {
             return [
@@ -56,7 +56,7 @@ class Controllers {
             $value = $this->allModel->encryptCookie($email);
 
             // Set session variables
-            return ["status" => true, "token" => $value];
+            return ["status" => true, "token" => $value, "isActive" => $fetchuserinfo['isActive']];
 
         } catch (Exception $th) {
             return [
