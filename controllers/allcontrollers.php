@@ -164,114 +164,144 @@ class Controllers {
     }
 
     public function updateProfile(){
-        try{
-
+        try {
             $email = $this->allModel->decryptCookie($this->allModel->sanitizeInput($_POST['email']));
-            if(!$this->allModel->getUserInfo($email)){
-                throw new Exception("User not found");
-            }
             $userinfo = $this->allModel->getUserInfo($email);
-            $input = [];
-            $requiredFields = ['address', 'sin', 'emergencyContact', 'dateOfBirth', 'driverlicensenumber', 'driverlicenseexpirationdate', 'transitNumber', 'institutionNumber', 'accountNumber', 'province', 'city', 'postal_code'];
-            foreach ($requiredFields as $field) {
-                $input[$field] = $this->allModel->sanitizeInput($_POST[$field] ?? '');
-                if (empty($input[$field])) {
-                    throw new Exception(ucfirst($field) . " is required");
-                }
-            }
-
-            $this->db->begin_transaction();
-
-            date_default_timezone_set($_POST['timezone'] ?? 'America/Toronto');
-
+            if (!$userinfo) throw new Exception("User not found");
+    
             $user_id = intval($userinfo['user_id']);
-            $uploadDir =  UPLOAD_URL;
-
-            $stmt = $this->db->prepare("UPDATE user_details SET driver_license_expiry_date = ?, driver_license_number = ?, address = ?, city = ?, province = ?, postal_code = ?, dob = ?, sin = ?, contact_number = ?, transit_number = ?, institution_number = ?, account_number = ? WHERE user_id = ?");
-            $stmt->bind_param("ssssssssssssi", $input['driverlicenseexpirationdate'], $input['driverlicensenumber'], $input['address'], $input['city'], $input['province'], $input['postal_code'], $input['dateOfBirth'], $input['sin'], $input['emergencyContact'], $input['transitNumber'], $input['institutionNumber'], $input['accountNumber'], $user_id);
-            if (!$stmt->execute()) {
-                throw new Exception("User details update failed: " . $stmt->error);
-            }
-            $stmt->close();
-
-            if (!empty($_FILES['documents']['name']) && isset($_POST['document_tags'])) {
-                foreach ($_FILES['documents']['name'] as $index => $name) {
-                    if (!$_FILES['documents']['tmp_name'][$index]) continue;
-
-                    // File size check (max 5 MB)
-                    if ($_FILES['documents']['size'][$index] > (5 * 1024 * 1024)) {
-                        throw new Exception("File $name is larger than 5MB");
-                    }
-
-                    // File type check (PDF only)
-                    $fileType = mime_content_type($_FILES['documents']['tmp_name'][$index]);
-                    if ($fileType !== 'application/pdf') {
-                        throw new Exception("File $name must be a PDF");
-                    }
-
-                    $tag = $_POST['document_tags'][$index];
-                    $safeName = time() . "_" . preg_replace('/[^a-zA-Z0-9\._-]/', '_', $name);
-                    $dest = $uploadDir . $safeName;
-
-                    if (!move_uploaded_file($_FILES['documents']['tmp_name'][$index], $dest)) {
-                        throw new Exception("Failed to upload document: $name");
-                    }
-
-                    $stmt = $this->db->prepare("UPDATE documents SET name = ?, updated_on = NOW() WHERE user_id = ? AND doc_tag = ?");
-                    $stmt->bind_param("sis", $safeName, $user_id, $tag);
-                    $stmt->execute();
-                    $stmt->close();
-                }
-            }
-
-            if (!empty($_FILES['certificates']['name']) && isset($_POST['certificate_tags'])) {
-                foreach ($_FILES['certificates']['name'] as $index => $name) {
-                    if (!$_FILES['certificates']['tmp_name'][$index]) continue;
-
-                    // File size check (max 5 MB)
-                    if ($_FILES['certificates']['size'][$index] > (5 * 1024 * 1024)) {
-                        throw new Exception("Certificate $name is larger than 5MB");
-                    }
-
-                    // File type check (PDF only)
-                    $fileType = mime_content_type($_FILES['certificates']['tmp_name'][$index]);
-                    if ($fileType !== 'application/pdf') {
-                        throw new Exception("Certificate $name must be a PDF");
-                    }
-
-                    $tag = $_POST['certificate_tags'][$index];
-                    $safeName = time() . "_" . preg_replace('/[^a-zA-Z0-9\._-]/', '_', $name);
-                    $dest = $uploadDir . $safeName;
-
-                    if (!move_uploaded_file($_FILES['certificates']['tmp_name'][$index], $dest)) {
-                        throw new Exception("Failed to upload certificate: $name");
-                    }
-
-                    $stmt = $this->db->prepare("UPDATE certificates SET certificate_name = ?, updated_on = NOW() WHERE user_id = ? AND cert_tag = ?");
-                    $stmt->bind_param("sis", $safeName, $user_id, $tag);
-                    $stmt->execute();
-                    $stmt->close();
-                }
-            }
-
-            $date = date("Y-m-d H:i:m");
-
-            $this->allModel->logActivity($userinfo['email'], $user_id, 'update-profile', 'User updated their profile', $date);
-
-            $this->db->commit();
-
-            return [
-                'status' => true,
-                'message' => 'Profile updated successfully'
+            $uploadDir = UPLOAD_URL;
+            
+            // Set timezone
+            date_default_timezone_set($_POST['timezone'] ?? 'America/Toronto');
+    
+            $requiredFields = [
+                'address','sin','emergencyContact','dateOfBirth','driverlicensenumber',
+                'driverlicenseexpirationdate','transitNumber','institutionNumber',
+                'accountNumber','province','city','postal_code'
             ];
-
-        }catch(Exception $th){
+    
+            $input = [];
+            foreach ($requiredFields as $field) {
+                $input[$field] = $this->allModel->sanitizeInput(trim($_POST[$field] ?? ''));
+                if ($input[$field] === '') throw new Exception(ucfirst($field)." is required");
+            }
+    
+            $this->db->begin_transaction();
+    
+            // Update user details
+            $stmt = $this->db->prepare("UPDATE user_details 
+                SET driver_license_expiry_date=?, driver_license_number=?, address=?, city=?, province=?, postal_code=?, dob=?, sin=?, contact_number=?, transit_number=?, institution_number=?, account_number=? 
+                WHERE user_id=?");
+            $stmt->bind_param("ssssssssssssi", 
+                $input['driverlicenseexpirationdate'], $input['driverlicensenumber'], 
+                $input['address'], $input['city'], $input['province'], $input['postal_code'], 
+                $input['dateOfBirth'], $input['sin'], $input['emergencyContact'], 
+                $input['transitNumber'], $input['institutionNumber'], $input['accountNumber'], 
+                $user_id
+            );
+            $stmt->execute();
+            $stmt->close();
+    
+            $finfo = finfo_open(FILEINFO_MIME_TYPE);
+            $timestamp = time();
+    
+            // Batch upload handler
+            $handleUploads = function($files, $tags, $table, $column, $tagColumn) use ($uploadDir, $user_id, $finfo, $timestamp) {
+                $updates = [];
+                
+                foreach ($files['name'] as $index => $name) {
+                    if (!$files['tmp_name'][$index]) continue;
+                    
+                    if ($files['size'][$index] > 5 * 1024 * 1024) 
+                        throw new Exception("$name exceeds 5MB limit");
+                    
+                    $fileType = finfo_file($finfo, $files['tmp_name'][$index]);
+                    if ($fileType !== 'application/pdf') 
+                        throw new Exception("$name must be a PDF file");
+    
+                    $safeName = "{$timestamp}_{$index}_" . bin2hex(random_bytes(4)) . "_" . 
+                               preg_replace('/[^a-zA-Z0-9\._-]/', '_', $name);
+                    $dest = $uploadDir . $safeName;
+                    
+                    if (!move_uploaded_file($files['tmp_name'][$index], $dest))
+                        throw new Exception("Failed to move uploaded file: $name");
+    
+                    $updates[] = ['name' => $safeName, 'tag' => $tags[$index]];
+                }
+    
+                // Batch update if we have files
+                if (!empty($updates)) {
+                    $this->batchUpdateFiles($updates, $user_id, $table, $column, $tagColumn);
+                }
+            };
+    
+            if (!empty($_FILES['documents']['name']) && isset($_POST['document_tags'])) {
+                $handleUploads($_FILES['documents'], $_POST['document_tags'], 'documents', 'name', 'doc_tag');
+            }
+    
+            if (!empty($_FILES['certificates']['name']) && isset($_POST['certificate_tags'])) {
+                $handleUploads($_FILES['certificates'], $_POST['certificate_tags'], 'certificates', 'certificate_name', 'cert_tag');
+            }
+    
+            finfo_close($finfo);
+    
+            $this->allModel->logActivity($userinfo['email'], $user_id, 'update-profile', 'User updated profile', date("Y-m-d H:i:s"));
+    
+            $this->db->commit();
+            return ['status'=>true, 'message'=>'Profile updated successfully'];
+    
+        } catch(Exception $th) {
             $this->db->rollback();
-            return [
-                'status' => false,
-                'message' => $th->getMessage()
-            ];  
+            return ['status'=>false, 'message'=>$th->getMessage()];
         }
+    }
+    
+    /**
+     * Batch update files in database using CASE statements
+     */
+    private function batchUpdateFiles(array $files, int $user_id, string $table, string $column, string $tagColumn): void {
+        if (empty($files)) return;
+    
+        $cases = [];
+        $params = [];
+        $tags = [];
+        
+        // Build CASE statements and parameters
+        foreach ($files as $file) {
+            $cases[] = "WHEN ? THEN ?";
+            $params[] = $file['tag'];
+            $params[] = $file['name'];
+            $tags[] = $file['tag'];
+        }
+        
+        // Build the IN clause for tags
+        $tagsIn = implode(',', array_fill(0, count($tags), '?'));
+        
+        // Combine all parameters
+        $params = array_merge($params, $tags);
+        $params[] = $user_id;
+        
+        // Build the SQL query
+        $sql = "UPDATE {$table} SET {$column} = CASE {$tagColumn} 
+                " . implode(' ', $cases) . "
+                END, updated_on = NOW() 
+                WHERE {$tagColumn} IN ({$tagsIn}) AND user_id = ?";
+        
+        $stmt = $this->db->prepare($sql);
+        if (!$stmt) {
+            throw new Exception("Failed to prepare batch update statement");
+        }
+        
+        // Build types string: 'ss' for each file + 's' for each tag + 'i' for user_id
+        $types = str_repeat('ss', count($files)) . str_repeat('s', count($tags)) . 'i';
+        $stmt->bind_param($types, ...$params);
+        
+        if (!$stmt->execute()) {
+            throw new Exception("Batch update failed: " . $stmt->error);
+        }
+        
+        $stmt->close();
     }
 
     public function fetchAllActivities(){
