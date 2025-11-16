@@ -163,32 +163,64 @@ class Controllers {
         return ['status' => true, 'message' => 'User found', 'data' => $this->allModel->getUserInfo($email)];
     }
 
+
     public function updateProfile(){
         try {
             $email = $this->allModel->decryptCookie($this->allModel->sanitizeInput($_POST['email']));
             $userinfo = $this->allModel->getUserInfo($email);
             if (!$userinfo) throw new Exception("User not found");
-    
+
             $user_id = intval($userinfo['user_id']);
             $uploadDir = UPLOAD_URL;
             
             // Set timezone
             date_default_timezone_set($_POST['timezone'] ?? 'America/Toronto');
-    
+
             $requiredFields = [
                 'address','sin','emergencyContact','dateOfBirth','driverlicensenumber',
                 'driverlicenseexpirationdate','transitNumber','institutionNumber',
                 'accountNumber','province','city','postal_code'
             ];
-    
+
             $input = [];
             foreach ($requiredFields as $field) {
                 $input[$field] = $this->allModel->sanitizeInput(trim($_POST[$field] ?? ''));
                 if ($input[$field] === '') throw new Exception(ucfirst($field)." is required");
             }
-    
+
+            // ========== CUMULATIVE FILE SIZE VALIDATION ==========
+            $maxCumulativeSize = 30 * 1024 * 1024; // 30MB in bytes
+            $totalFileSize = 0;
+
+            // Calculate total size of all files being uploaded
+            $calculateTotalSize = function($files) use (&$totalFileSize) {
+                if (!empty($files['size'])) {
+                    foreach ($files['size'] as $size) {
+                        if ($size > 0) {
+                            $totalFileSize += $size;
+                        }
+                    }
+                }
+            };
+
+            // Calculate for both document and certificate uploads
+            if (!empty($_FILES['documents']['name'])) {
+                $calculateTotalSize($_FILES['documents']);
+            }
+            
+            if (!empty($_FILES['certificates']['name'])) {
+                $calculateTotalSize($_FILES['certificates']);
+            }
+
+            // Check if cumulative size exceeds limit
+            if ($totalFileSize > $maxCumulativeSize) {
+                $cumulativeSizeMB = round($totalFileSize / (1024 * 1024), 2);
+                throw new Exception("Total upload size ({$cumulativeSizeMB}MB) exceeds the 30MB limit. Please reduce file sizes or upload fewer files.");
+            }
+            // ========== END CUMULATIVE VALIDATION ==========
+
             $this->db->begin_transaction();
-    
+
             // Update user details
             $stmt = $this->db->prepare("UPDATE user_details 
                 SET driver_license_expiry_date=?, driver_license_number=?, address=?, city=?, province=?, postal_code=?, dob=?, sin=?, contact_number=?, transit_number=?, institution_number=?, account_number=? 
@@ -202,55 +234,56 @@ class Controllers {
             );
             $stmt->execute();
             $stmt->close();
-    
+
             $finfo = finfo_open(FILEINFO_MIME_TYPE);
             $timestamp = time();
-    
-            // Batch upload handler
+
+            // Batch upload handler (updated to use the same cumulative check)
             $handleUploads = function($files, $tags, $table, $column, $tagColumn) use ($uploadDir, $user_id, $finfo, $timestamp) {
                 $updates = [];
                 
                 foreach ($files['name'] as $index => $name) {
                     if (!$files['tmp_name'][$index]) continue;
                     
+                    // Individual file size check (keep this for per-file validation)
                     if ($files['size'][$index] > 5 * 1024 * 1024) 
                         throw new Exception("$name exceeds 5MB limit");
                     
                     $fileType = finfo_file($finfo, $files['tmp_name'][$index]);
                     if ($fileType !== 'application/pdf') 
                         throw new Exception("$name must be a PDF file");
-    
+
                     $safeName = "{$timestamp}_{$index}_" . bin2hex(random_bytes(4)) . "_" . 
-                               preg_replace('/[^a-zA-Z0-9\._-]/', '_', $name);
+                            preg_replace('/[^a-zA-Z0-9\._-]/', '_', $name);
                     $dest = $uploadDir . $safeName;
                     
                     if (!move_uploaded_file($files['tmp_name'][$index], $dest))
                         throw new Exception("Failed to move uploaded file: $name");
-    
+
                     $updates[] = ['name' => $safeName, 'tag' => $tags[$index]];
                 }
-    
+
                 // Batch update if we have files
                 if (!empty($updates)) {
                     $this->batchUpdateFiles($updates, $user_id, $table, $column, $tagColumn);
                 }
             };
-    
+
             if (!empty($_FILES['documents']['name']) && isset($_POST['document_tags'])) {
                 $handleUploads($_FILES['documents'], $_POST['document_tags'], 'documents', 'name', 'doc_tag');
             }
-    
+
             if (!empty($_FILES['certificates']['name']) && isset($_POST['certificate_tags'])) {
                 $handleUploads($_FILES['certificates'], $_POST['certificate_tags'], 'certificates', 'certificate_name', 'cert_tag');
             }
-    
+
             finfo_close($finfo);
-    
+
             $this->allModel->logActivity($userinfo['email'], $user_id, 'update-profile', 'User updated profile', date("Y-m-d H:i:s"));
-    
+
             $this->db->commit();
             return ['status'=>true, 'message'=>'Profile updated successfully'];
-    
+
         } catch(Exception $th) {
             $this->db->rollback();
             return ['status'=>false, 'message'=>$th->getMessage()];
