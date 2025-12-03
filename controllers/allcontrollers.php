@@ -769,6 +769,10 @@ class Controllers {
                     ];
                 }
 
+                if($currentTimeObj < $scheduleEndTimeObj) {
+                    throw new Exception("Cannot clock out - your scheduled shift has not yet ended.");
+                }
+
                 // update clockout
                 $sql = "UPDATE scheduling SET clockout = ? WHERE id = ?";
                 $stmt = $this->db->prepare($sql);
