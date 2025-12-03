@@ -663,13 +663,8 @@ class Controllers {
                 throw new Exception("User not found.");
             }
 
-            // check schedule
-            $sql = "SELECT id, clockin, clockout, start_time, end_time, location_id,
-                    CASE 
-                    WHEN end_time <= start_time 
-                        THEN TIMESTAMPDIFF(SECOND, start_time, DATE_ADD(end_time, INTERVAL 1 DAY))
-                        ELSE TIMESTAMPDIFF(SECOND, start_time, end_time)
-                    END AS total_seconds 
+            // FETCH SCHEDULE WITH SHIFT TYPE
+            $sql = "SELECT id, clockin, clockout, start_time, end_time, location_id, shift_type, schedule_date
                     FROM scheduling 
                     WHERE email = ? AND schedule_date = ?";
             $stmt = $this->db->prepare($sql);
@@ -683,20 +678,51 @@ class Controllers {
                 throw new Exception("No schedule found for today");
             }
 
-            // Convert schedule times to DateTime objects for comparison
+            // -----------------------------------------
+            // ✅ CORRECTED TOTAL SECONDS CALCULATION
+            // -----------------------------------------
+
+            $work_seconds = $this->calculateScheduledSeconds(
+                $schedule['schedule_date'],
+                $schedule['start_time'],
+                $schedule['end_time'],
+                $schedule['shift_type'] ?? 'day'
+            );
+            // -----------------------------------------
+
+            // Convert schedule times to DateTime objects
             $currentTimeObj = DateTime::createFromFormat('H:i:s', $time);
             $scheduleEndTimeObj = DateTime::createFromFormat('H:i:s', $schedule['end_time']);
+            $scheduleStartTimeObj = DateTime::createFromFormat('H:i:s', $schedule['start_time']);
+
+            // For comparison, we need full DateTime objects with date
+            $currentDateTime = new DateTime($date . ' ' . $time);
+            $scheduleStartDateTime = new DateTime($schedule['schedule_date'] . ' ' . $schedule['start_time']);
+            $scheduleEndDateTime = new DateTime($schedule['schedule_date'] . ' ' . $schedule['end_time']);
             
-            // Handle overnight schedules (if end time is earlier than start time, it spans to next day)
-            if ($schedule['end_time'] <= $schedule['start_time']) {
-                // For overnight schedules, add 1 day to end time for comparison
-                $scheduleEndTimeObj->modify('+1 day');
+            // Adjust end datetime for overnight shifts
+            if ($schedule['shift_type'] === 'overnight') {
+                $scheduleEndDateTime->modify('+1 day');
+            } 
+            // Also handle if end time is earlier than start time
+            elseif (strtotime($schedule['end_time']) <= strtotime($schedule['start_time'])) {
+                $scheduleEndDateTime->modify('+1 day');
             }
 
+            // ============================
+            // CLOCK IN
+            // ============================
             if ($action === "clockin") {
-                // Check if current time is beyond scheduled end time
-                if ($currentTimeObj > $scheduleEndTimeObj) {
+                // Check if shift has already ended
+                if ($currentDateTime > $scheduleEndDateTime) {
                     throw new Exception("Cannot clock in - your scheduled shift has already ended.");
+                }
+
+                // Check if too early to clock in (optional - 15 minutes before shift)
+                $earliestClockIn = clone $scheduleStartDateTime;
+                $earliestClockIn->modify('-15 minutes');
+                if ($currentDateTime < $earliestClockIn) {
+                    throw new Exception("Cannot clock in more than 15 minutes before your scheduled shift.");
                 }
 
                 if (!empty($schedule['clockout'])) {
@@ -707,10 +733,7 @@ class Controllers {
                     throw new Exception("You have already clocked in today");
                 }
 
-                $distance = 0;
-                $longitude = 0;
-                $latitude = 0;
-                // check distance
+                // Distance calculation
                 $sql = "SELECT ST_Distance_Sphere(
                             POINT(longitude, latitude),
                             POINT(?, ?)
@@ -723,38 +746,39 @@ class Controllers {
                 $stmt->execute();
                 $result = $stmt->get_result();
                 $locationData = $result->fetch_assoc();
-                $distance = $locationData['distance'] ?? null;
-                $longitude = $locationData['longitude'] ?? null;
-                $latitude = $locationData['latitude'] ?? null;
                 $stmt->close();
 
-                // Debug log before checking distance
-                //error_log("Frontend coordinates: longitude={$long}, latitude={$lat}");
-                //error_log("Database coordinates: longitude={$locationData['longitude']}, latitude={$locationData['latitude']}");
-                //error_log("Calculated distance (meters): " . ($distance ?? 'NULL'));
-
-                if ($distance > 40) {
+                if (($locationData['distance'] ?? 1000) > 40) {
                     throw new Exception("You are not within your appointment location yet");
                 }
 
-                // update clockin
+                // Update clock-in
                 $sql = "UPDATE scheduling SET clockin = ? WHERE id = ?";
                 $stmt = $this->db->prepare($sql);
                 $stmt->bind_param("si", $time, $schedule['id']);
                 $stmt->execute();
                 $stmt->close();
 
-                $this->allModel->logActivity($userinfo['email'], $userinfo['user_id'], 'check-in', 'Clock-in successful at ' . $time, $date);
+                $this->allModel->logActivity(
+                    $userinfo['email'], 
+                    $userinfo['user_id'], 
+                    'check-in', 
+                    'Clock-in successful at ' . $time, 
+                    $date
+                );
 
                 return [
                     'status' => true,
                     'message' => 'Clock-in successful at ' . $time,
-                    'latitude' => $latitude,
-                    'longitude' => $longitude,
-                    'work_seconds' => $schedule['total_seconds']
+                    'latitude' => $locationData['latitude'] ?? null,
+                    'longitude' => $locationData['longitude'] ?? null,
+                    'work_seconds' => $work_seconds // ✅ Correctly calculated
                 ];
             }
 
+            // ============================
+            // CLOCK OUT
+            // ============================
             if ($action === "clockout") {
                 if (empty($schedule['clockin'])) {
                     return [
@@ -762,6 +786,7 @@ class Controllers {
                         'message' => 'You have not clocked in yet'
                     ];
                 }
+
                 if (!empty($schedule['clockout'])) {
                     return [
                         'status' => false,
@@ -769,25 +794,41 @@ class Controllers {
                     ];
                 }
 
-                if($currentTimeObj < $scheduleEndTimeObj) {
-                    throw new Exception("Cannot clock out - your scheduled shift has not yet ended.");
+                // Check if it's too early to clock out (optional)
+                if ($currentDateTime < $scheduleEndDateTime) {
+                    // Allow early clockout with warning if shift end time hasn't passed
+                    throw new Exception("You can not clock out before your scheduled shift end time.");
                 }
 
-                // update clockout
+                // Update clock-out
                 $sql = "UPDATE scheduling SET clockout = ? WHERE id = ?";
                 $stmt = $this->db->prepare($sql);
                 $stmt->bind_param("si", $time, $schedule['id']);
                 $stmt->execute();
                 $stmt->close();
 
-                $this->allModel->logActivity($userinfo['email'], $userinfo['user_id'], 'check-out', 'Clock-out successful at ' . $time, $date);
+                // Calculate actual worked seconds
+                $clockinDateTime = new DateTime($date . ' ' . $schedule['clockin']);
+                $clockoutDateTime = new DateTime($date . ' ' . $time);
+                $actualWorkedSeconds = $clockoutDateTime->getTimestamp() - $clockinDateTime->getTimestamp();
+
+                $this->allModel->logActivity(
+                    $userinfo['email'], 
+                    $userinfo['user_id'], 
+                    'check-out', 
+                    'Clock-out successful at ' . $time, 
+                    $date
+                );
 
                 return [
                     'status' => true,
-                    'message' => 'Clock-out successful at ' . $time
+                    'message' => 'Clocked-out successfully',
+                    'work_seconds' => $work_seconds,
+                    'worked_seconds' => $actualWorkedSeconds
                 ];
             }
 
+            // Invalid action
             return [
                 'status' => false,
                 'message' => 'Invalid action specified'
@@ -799,6 +840,34 @@ class Controllers {
                 'message' => $th->getMessage()
             ];
         }
+    }
+
+    public function calculateScheduledSeconds($scheduleDate, $startTime, $endTime, $shiftType) {
+        if (empty($scheduleDate) || empty($startTime) || empty($endTime)) {
+            return 0;
+        }
+        
+        // Combine date with time
+        $startDateTime = new DateTime($scheduleDate . ' ' . $startTime);
+        $endDateTime = new DateTime($scheduleDate . ' ' . $endTime);
+        
+        // Add 1 day to end time for overnight shifts
+        if ($shiftType === 'overnight') {
+            $endDateTime->modify('+1 day');
+        } 
+        // Also handle if end time is earlier than start time (crossing midnight)
+        elseif (strtotime($endTime) <= strtotime($startTime)) {
+            $endDateTime->modify('+1 day');
+        }
+        
+        // Calculate difference in seconds
+        $interval = $startDateTime->diff($endDateTime);
+        $seconds = ($interval->days * 24 * 3600) + 
+                ($interval->h * 3600) + 
+                ($interval->i * 60) + 
+                $interval->s;
+        
+        return $seconds;
     }
 
     public function saveNotification(){
