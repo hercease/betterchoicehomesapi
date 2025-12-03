@@ -780,6 +780,7 @@ class Controllers {
             // CLOCK OUT
             // ============================
             if ($action === "clockout") {
+                
                 if (empty($schedule['clockin'])) {
                     return [
                         'status' => false,
