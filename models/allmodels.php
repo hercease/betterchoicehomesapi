@@ -139,7 +139,7 @@ class allModels {
 
          // Fetch stats for the current month
         $statStmt = $this->db->prepare("
-            SELECT id, schedule_date, clockin, clockout, pay_per_hour
+            SELECT id, schedule_date, clockin, clockout, pay_per_hour, shift_type
             FROM scheduling
             WHERE user_id = ? 
             AND MONTH(schedule_date) = MONTH(CURRENT_DATE())
@@ -158,9 +158,15 @@ class allModels {
             $records[] = $stat;
 
             if (!empty($stat['clockin']) && !empty($stat['clockout'])) {
-                $start = strtotime($stat['clockin']);
-                $end   = strtotime($stat['clockout']);
-                $hours = ($end - $start) / 3600; // Convert seconds to hours
+                $start = strtotime($stat['schedule_date'] . ' ' . $stat['clockin']);
+                $end   = strtotime($stat['schedule_date'] . ' ' . $stat['clockout']);
+                
+                // For overnight shifts, check if clockout is earlier than clockin
+                if ($stat['shift_type'] === 'overnight' && $end < $start) {
+                    $end = strtotime('+1 day', $end);
+                }
+                
+                $hours = ($end - $start) / 3600;
 
                 if ($hours > 0) {
                     $totalHours += $hours;
