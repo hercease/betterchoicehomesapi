@@ -158,15 +158,28 @@ class allModels {
             $records[] = $stat;
 
             if (!empty($stat['clockin']) && !empty($stat['clockout'])) {
-                $start = strtotime($stat['schedule_date'] . ' ' . $stat['clockin']);
+
+                $startDateTime = new DateTime($stat['schedule_date'] . ' ' . $stat['clockin']);
+        
+                // Create end datetime - add 1 day for overnight shifts
+                $endDateTime = new DateTime($stat['schedule_date'] . ' ' . $stat['clockout']);
+                if ($stat['shift_type'] === 'overnight') {
+                    $endDateTime->modify('+24 hours');
+                }
+                
+                // Calculate difference in hours
+                $interval = $startDateTime->diff($endDateTime);
+                $hours = $interval->h + ($interval->i / 60) + ($interval->s / 3600);
+
+                /*$start = strtotime($stat['schedule_date'] . ' ' . $stat['clockin']);
                 $end   = strtotime($stat['schedule_date'] . ' ' . $stat['clockout']);
                 
                 // For overnight shifts, check if clockout is earlier than clockin
-                if ($stat['shift_type'] === 'overnight' && $end < $start) {
+                if ($stat['shift_type'] === 'overnight') {
                     $end = strtotime('+1 day', $end);
                 }
                 
-                $hours = ($end - $start) / 3600;
+                $hours = ($end - $start) / 3600;*/
 
                 if ($hours > 0) {
                     $totalHours += $hours;
