@@ -642,6 +642,7 @@ class Controllers {
         }
     }
 
+
     public function Attendance() {
         try {
             $email = $this->allModel->decryptCookie(
@@ -772,7 +773,8 @@ class Controllers {
                     'message' => 'Clock-in successful at ' . $time,
                     'latitude' => $locationData['latitude'] ?? null,
                     'longitude' => $locationData['longitude'] ?? null,
-                    'work_seconds' => $work_seconds // ✅ Correctly calculated
+                    'work_seconds' => $work_seconds, // ✅ Correctly calculated
+                    'schedule_id' => $schedule['id']
                 ];
             }
 
@@ -918,6 +920,31 @@ class Controllers {
             ];
         }
 
+    }
+
+    public function checkScheduleClockout(){
+
+        $email = $this->allModel->decryptCookie($this->allModel->sanitizeInput($_POST['email'] ?? ''));
+        $schedule_id = $this->allModel->sanitizeInput($_POST['schedule_id'] ?? '');
+        try {
+
+            $schedule = $this->allModel->getUserSchedule($email, $schedule_id);
+
+            if (!$schedule) {
+                throw new Exception("Schedule not found.");
+            }
+
+            return [
+                "clocked_out" => empty($schedule['clockedout']) ? false : true,
+                "clocked_out_at" => date('H:i:s', strtotime($schedule['clockedout'])),
+            ];
+
+        } catch (Exception $e) {
+            return [
+                'status' => false,
+                'message' => $e->getMessage()
+            ];
+        }
     }
 
 

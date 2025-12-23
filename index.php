@@ -83,6 +83,10 @@ try {
             $fingerprintlogin = $controller->processFingerprintLogin();
             sendSuccessResponse($fingerprintlogin); // sends as JSON
             break;
+        case '/checkscheduleclockout':
+            $checkscheduleclockout = $controller->checkScheduleClockout();
+            sendSuccessResponse($checkscheduleclockout); // sends as JSON
+            break;
             
     }
 

@@ -385,6 +385,14 @@ class allModels {
         $stmt->execute();
         $stmt->close();
     }
+
+    public function getUserSchedule($email, $schedule_id) {
+        $stmt = $this->db->prepare("SELECT * FROM schedules WHERE email = ? AND id = ?");
+        $stmt->bind_param("si", $email, $schedule_id);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        return $result->fetch_assoc();
+    }
     
 
 
