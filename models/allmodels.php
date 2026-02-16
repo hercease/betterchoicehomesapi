@@ -91,24 +91,26 @@ class allModels {
         }
 
         // Fetch documents separately
-        $docStmt = $this->db->prepare("
-            SELECT id, title, doc_tag, name, isApproved, optional 
-            FROM documents 
-            WHERE user_id = ?
+        $docStmt = $this->db->prepare("SELECT dt.id, dt.name AS title, dt.tag AS doc_tag, dt.is_required, d.name AS document_name, d.isApproved
+            FROM document_types dt LEFT JOIN documents d ON d.doc_tag = dt.tag AND d.user_id = ?
         ");
         $docStmt->bind_param("i", $user['user_id']);
         $docStmt->execute();
         $docResult = $docStmt->get_result();
         $documents = [];
         while ($doc = $docResult->fetch_assoc()) {
+            $fileUrl = '';
+            if (!empty($doc['document_name'])) {
+                $fileUrl = (defined('IMAGE_URL') ? IMAGE_URL : '') . "/public/assets/img/" . $doc['document_name'];
+            }
             $documents[] = [
                 'id'         => $doc['id'],
                 'title'      => $doc['title'],
                 'tag'        => $doc['doc_tag'],
-                'file_name'  => $doc['name'],
-                'file_url'   => (defined('IMAGE_URL') ? IMAGE_URL : '') . "/public/assets/img/" . $doc['name'],
+                'file_name'  => $doc['document_name'],
+                'file_url'   => $fileUrl,
                 'isApproved' => (bool)$doc['isApproved'],
-                'optional'   => (bool)$doc['optional'],
+                'optional'   => (bool)$doc['is_required'],
             ];
         }
         $docStmt->close();
@@ -125,12 +127,16 @@ class allModels {
         $certResult = $certStmt->get_result();
         $certificates = [];
         while ($cert = $certResult->fetch_assoc()) {
+            $certFileUrl = '';
+            if (!empty($cert['certificate_name'])) {
+                $certFileUrl = (defined('IMAGE_URL') ? IMAGE_URL : '') . "/public/assets/img/" . $cert['certificate_name'];
+            }
             $certificates[] = [
                 'id'         => $cert['id'],
-                'cert_tag'        => $cert['cert_tag'],
+                'cert_tag'   => $cert['cert_tag'],
                 'title'      => $cert['title'],
                 'file_name'  => $cert['certificate_name'],
-                'file_url'   => (defined('IMAGE_URL') ? IMAGE_URL : '') . "/public/assets/img/" . $cert['certificate_name'],
+                'file_url'   => $certFileUrl,
                 'isApproved' => (bool)$cert['isApproved'],
                 'optional'   => true,
             ];

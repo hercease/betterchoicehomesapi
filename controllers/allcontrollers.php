@@ -295,12 +295,66 @@ class Controllers {
      */
     private function batchUpdateFiles(array $files, int $user_id, string $table, string $column, string $tagColumn): void {
         if (empty($files)) return;
-    
+        
+        // Extract all tags from the incoming files
+        $incomingTags = array_column($files, 'tag');
+        
+        // STEP 1: Check which tags already exist for this user
+        $placeholders = implode(',', array_fill(0, count($incomingTags), '?'));
+        $checkSql = "SELECT {$tagColumn} FROM {$table} 
+                    WHERE user_id = ? AND {$tagColumn} IN ({$placeholders})";
+        
+        $checkStmt = $this->db->prepare($checkSql);
+        if (!$checkStmt) {
+            throw new Exception("Failed to prepare check statement: " . $this->db->error);
+        }
+        
+        // Bind parameters: user_id (int) + all tags (strings)
+        $types = 'i' . str_repeat('s', count($incomingTags));
+        $checkParams = array_merge([$user_id], $incomingTags);
+        $checkStmt->bind_param($types, ...$checkParams);
+        $checkStmt->execute();
+        $result = $checkStmt->get_result();
+        
+        // Collect existing tags
+        $existingTags = [];
+        while ($row = $result->fetch_assoc()) {
+            $existingTags[] = $row[$tagColumn];
+        }
+        $checkStmt->close();
+        
+        // Separate files into update vs insert groups
+        $updateFiles = [];
+        $insertFiles = [];
+        
+        foreach ($files as $file) {
+            if (in_array($file['tag'], $existingTags)) {
+                $updateFiles[] = $file;  // Exists → update
+            } else {
+                $insertFiles[] = $file;  // New → insert
+            }
+        }
+        
+        // STEP 2: Handle UPDATES (existing records)
+        if (!empty($updateFiles)) {
+            $this->performBatchUpdate($updateFiles, $user_id, $table, $column, $tagColumn);
+        }
+        
+        // STEP 3: Handle INSERTS (new records)
+        if (!empty($insertFiles)) {
+            $this->performBatchInsert($insertFiles, $user_id, $table, $column, $tagColumn);
+        }
+    }
+
+    /**
+     * Perform batch UPDATE for existing records
+     */
+    private function performBatchUpdate(array $files, int $user_id, string $table, string $column, string $tagColumn): void {
         $cases = [];
         $params = [];
         $tags = [];
         
-        // Build CASE statements and parameters
+        // Build CASE statements
         foreach ($files as $file) {
             $cases[] = "WHEN ? THEN ?";
             $params[] = $file['tag'];
@@ -308,14 +362,10 @@ class Controllers {
             $tags[] = $file['tag'];
         }
         
-        // Build the IN clause for tags
         $tagsIn = implode(',', array_fill(0, count($tags), '?'));
-        
-        // Combine all parameters
         $params = array_merge($params, $tags);
         $params[] = $user_id;
         
-        // Build the SQL query
         $sql = "UPDATE {$table} SET {$column} = CASE {$tagColumn} 
                 " . implode(' ', $cases) . "
                 END, updated_on = NOW() 
@@ -326,12 +376,47 @@ class Controllers {
             throw new Exception("Failed to prepare batch update statement");
         }
         
-        // Build types string: 'ss' for each file + 's' for each tag + 'i' for user_id
         $types = str_repeat('ss', count($files)) . str_repeat('s', count($tags)) . 'i';
         $stmt->bind_param($types, ...$params);
         
         if (!$stmt->execute()) {
             throw new Exception("Batch update failed: " . $stmt->error);
+        }
+        
+        $stmt->close();
+    }
+
+    /**
+     * Perform batch INSERT for new records
+     */
+    private function performBatchInsert(array $files, int $user_id, string $table, string $column, string $tagColumn): void {
+        // Build INSERT query with multiple rows
+        $values = [];
+        $params = [];
+        $types = '';
+        
+        foreach ($files as $file) {
+            $values[] = "(?, ?, ?, ?, NOW())";  // user_id, name, tag, created_on
+            $params[] = $user_id;
+            $params[] = $file['name'];
+            $params[] = $file['tag'];
+            $params[] = date('Y-m-d H:i:s');  // created_on
+            $types .= 'isss';  // integer, string, string, string
+        }
+        
+        $valuesSql = implode(', ', $values);
+        $sql = "INSERT INTO {$table} (user_id, {$column}, {$tagColumn}, created_on, updated_on) 
+                VALUES {$valuesSql}";
+        
+        $stmt = $this->db->prepare($sql);
+        if (!$stmt) {
+            throw new Exception("Failed to prepare batch insert statement: " . $this->db->error);
+        }
+        
+        $stmt->bind_param($types, ...$params);
+        
+        if (!$stmt->execute()) {
+            throw new Exception("Batch insert failed: " . $stmt->error);
         }
         
         $stmt->close();
